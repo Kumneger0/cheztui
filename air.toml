@@ -1,0 +1,19 @@
+root = "."
+
+[watch]
+include_ext = ["go", "tmpl"]
+exclude_dir = ["vendor", "tmp", "node_modules"]
+
+[build]
+cmd = "go build -o cheztui ."
+bin = "cheztui"
+full_bin = "./cheztui"
+delay = 1000
+log = "build.log"
+exclude_regex = ["_test.go"]
+follow_symlink = true
+
+[run]
+log = "stdout"
+send_interrupt = true
+clear_screen = true
