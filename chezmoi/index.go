@@ -17,6 +17,8 @@ type FileEntry struct {
 	IsManaged bool
 }
 
+type AltarnateScreeenExec struct{ error }
+
 func (f FileEntry) Title() string       { return f.Name }
 func (f FileEntry) FilterValue() string { return f.Name }
 
@@ -65,10 +67,16 @@ func GetChezmoiManagedFiles() ([]list.Item, error) {
 		//TODO: migrate to better-go
 		allManagedFilesEntery = append(allManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: true})
 	}
+	return allManagedFilesEntery, nil
+}
+
+func GetUnmanagedFiles() ([]list.Item, error) {
 	unmanaged, err := exec.Command(Command, "unmanaged").Output()
 	if err != nil {
 		return nil, err
 	}
+
+	var allUnManagedFilesEntery []list.Item
 
 	unmangedfiles := strings.Split(string(unmanaged), "\n")
 
@@ -78,23 +86,39 @@ func GetChezmoiManagedFiles() ([]list.Item, error) {
 			continue
 		}
 		//TODO: migrate to better-go
-		allManagedFilesEntery = append(allManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: false})
+		allUnManagedFilesEntery = append(allUnManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: false})
 	}
-	return allManagedFilesEntery, nil
+	return allUnManagedFilesEntery, nil
 }
 
-func RunChezmoiCommand(command string) error {
-	fmt.Println("The commad to excute", command)
-	cmd := exec.Command(Command, command)
+func GetAllFiles() ([]list.Item, error) {
+	managedFiles, err := GetChezmoiManagedFiles()
+	//TOOD:migrate to use better-go
+	if err != nil {
+		return nil, err
+	}
+	unmanagedFiles, err := GetUnmanagedFiles()
+	//TOOD:migrate to use better-go
+	if err != nil {
+		return nil, err
+	}
+	return append(managedFiles, unmanagedFiles...), nil
+}
+
+func RunChezmoiCommand(command ...string) error {
+	cmd := exec.Command(Command, command...)
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to run chezmoi %s: %w", command, err)
 	}
 	return nil
 }
-func RunChezmoiCommand2(command string, args ...string) error {
-	fmt.Println("The commad to excute", command)
-	cmd := exec.Command(Command, append([]string{command}, args...)...)
+
+func RunChezmoiCommandInteractive(command ...string) error {
+	cmd := exec.Command(Command, command...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to run chezmoi %s: %w", command, err)
@@ -103,19 +127,33 @@ func RunChezmoiCommand2(command string, args ...string) error {
 }
 
 func AddFile(path string) error {
-	return RunChezmoiCommand2("add", path)
+	return RunChezmoiCommandInteractive("add", path)
 }
 
 func ForgetFile(path string) error {
-	return RunChezmoiCommand(fmt.Sprintf("forget %s", path))
+	return RunChezmoiCommandInteractive("forget", path)
 }
 
-type EditError struct{ err error }
+func EditFile(path string) tea.Cmd {
+	c := exec.Command(Command, "edit", path)
 
-func EditFile(path string) error {
-	c := exec.Command(Command, fmt.Sprintf("edit %s", path))
-	_ = tea.ExecProcess(c, func(err error) tea.Msg {
-		return EditError{err: err}
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return AltarnateScreeenExec{err}
 	})
-	return nil
+}
+
+func DiffFile(path string) tea.Cmd {
+	c := exec.Command(Command, "diff", path)
+
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return AltarnateScreeenExec{err}
+	})
 }

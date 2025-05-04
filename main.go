@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -25,6 +26,11 @@ var (
 			Bold(true)
 )
 
+type toast struct {
+	message string
+	expires time.Time
+}
+
 type customDelegate struct {
 	list.DefaultDelegate
 }
@@ -39,10 +45,10 @@ func (d customDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 
 	if index == m.Index() {
 		fmt.Fprint(w, selectedStyle.Render(" "+str+" "))
+	} else {
 		if entry.IsManaged {
 			fmt.Fprint(w, " [managed]")
 		}
-	} else {
 		fmt.Fprint(w, normalStyle.Render(" "+str+" "))
 	}
 }
@@ -57,10 +63,40 @@ var keyBindings = []struct {
 	{key: "p", description: "Push to GitHub"},
 	{key: "d", description: "Show diff"},
 	{key: "A", description: "Apply changes"},
+	{key: "m", description: "Show only managed files"},
+	{key: "u", description: "Show only unmanaged files"},
 }
 
 type model struct {
-	files list.Model
+	files             list.Model
+	isAltranateScreen bool
+	toast             *toast
+}
+
+type toastMsg struct {
+	message string
+	expires time.Time
+}
+
+type clearToastMsg struct{}
+
+func showToast(message string, duration time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		return toastMsg{
+			message: message,
+			expires: time.Now().Add(duration),
+		}
+	}
+}
+
+func renderToast(msg string) string {
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color("#FF5F5F")).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Padding(0, 1).
+		Bold(true)
+
+	return style.Render(msg)
 }
 
 func getAbsolutePath(path string) (string, error) {
@@ -84,59 +120,102 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case toastMsg:
+		m.toast = &toast{
+			message: msg.message,
+			expires: msg.expires,
+		}
+		return m, tea.Tick(time.Until(msg.expires), func(t time.Time) tea.Msg {
+			return clearToastMsg{}
+		})
+	case clearToastMsg:
+		m.toast = nil
+		return m, nil
+
 	case tea.KeyMsg:
 		selectedFile := m.files.SelectedItem()
 		switch msg.String() {
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "m":
+			managedFiles, err := chezmoi.GetChezmoiManagedFiles()
+			if err != nil {
+				return m, showToast(err.Error(), 2*time.Second)
+			}
+			m.files.SetItems(managedFiles)
+		case "u":
+			unmanagedFiles, err := chezmoi.GetUnmanagedFiles()
+			if err != nil {
+				return m, showToast(err.Error(), 2*time.Second)
+			}
+			m.files.SetItems(unmanagedFiles)
 		case "a":
 			if selectedFile != nil {
 				path, err := getAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
-					fmt.Println("Error getting absolute path:", err)
+					return m, showToast(err.Error(), 2*time.Second)
 				}
-				fmt.Println("Adding file:", path)
 				err = chezmoi.AddFile(path)
 				if err != nil {
-					fmt.Println(err.Error())
+					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					// figure out a way to show nice toast message
+					updatedFiles, err := chezmoi.GetAllFiles()
+					if err != nil {
+						return m, showToast(err.Error(), 2*time.Second)
+					}
+					m.files.SetItems(updatedFiles)
+					return m, showToast("File added successfully", 2*time.Second)
 				}
 			}
 		case "r":
 			if selectedFile != nil {
 				path, err := getAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
-					fmt.Println("Error getting absolute path:", err)
+					return m, showToast(err.Error(), 2*time.Second)
 				}
 				err = chezmoi.ForgetFile(path)
 				if err != nil {
-					//TODO: figure out a way to show nice toast message
+					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					//TODO: figure out a way to show nice toast message
+					updatedFiles, err := chezmoi.GetChezmoiManagedFiles()
+					if err != nil {
+						return m, showToast(err.Error(), 2*time.Second)
+					}
+					m.files.SetItems(updatedFiles)
 				}
+			}
+		case "d":
+			if selectedFile != nil {
+				path, err := getAbsolutePath(selectedFile.FilterValue())
+				if err != nil {
+					return m, showToast(err.Error(), 2*time.Second)
+				}
+				m.isAltranateScreen = true
+
+				return m, chezmoi.DiffFile(path)
 			}
 		case "e":
 			if selectedFile != nil {
 				path, err := getAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
-					fmt.Println("Error getting absolute path:", err)
+					return m, showToast(err.Error(), 2*time.Second)
 				}
-				err = chezmoi.EditFile(path)
-				if err != nil {
-					//TODO: figure out a way to show nice toast message
-				} else {
-					//TODO: figure out a way to show nice toast message
-				}
+				return m, chezmoi.EditFile(path)
 			}
 		case "A":
 			if selectedFile != nil {
-				err := chezmoi.RunChezmoiCommand("apply")
-            if err != nil {
-					//TODO: figure out a way to show nice toast message
+				err := chezmoi.RunChezmoiCommandInteractive("apply")
+				if err != nil {
+					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					//TODO: figure out a way to show nice toast message
+					updatedFiles, err := chezmoi.GetChezmoiManagedFiles()
+					if err != nil {
+						return m, showToast(err.Error(), 2*time.Second)
+					}
+					m.files.SetItems(updatedFiles)
+					return m, showToast("Changes applied successfully", 2*time.Second)
 				}
 			}
 		case "p":
@@ -144,6 +223,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				//TODO: push to github
 			}
 		}
+	case chezmoi.AltarnateScreeenExec:
+		m.isAltranateScreen = false
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
 		m.files.SetSize(msg.Width-h, msg.Height-v)
@@ -155,8 +238,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.isAltranateScreen {
+		fmt.Println("running diff")
+		return ""
+	}
+
+	m.files.Title = "Cheztui"
 	listView := m.files.View()
-	return docStyle.Render(listView)
+
+	baseView := lipgloss.JoinHorizontal(lipgloss.Center, listView)
+
+	if m.toast != nil && time.Now().Before(m.toast.expires) {
+		toastView := renderToast(m.toast.message)
+		return baseView + "\n" + toastView
+	}
+
+	return baseView
+
 }
 
 func main() {
@@ -189,7 +287,7 @@ func main() {
 		}
 	}
 
-	managedFiles, err := chezmoi.GetChezmoiManagedFiles()
+	managedFiles, err := chezmoi.GetAllFiles()
 
 	//TODO:migrate to use better-go
 	if err != nil {
@@ -213,6 +311,8 @@ func main() {
 	m := model{files: bubleList}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
+
+
 
 	_, err = p.Run()
 	if err != nil {
