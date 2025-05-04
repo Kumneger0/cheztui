@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kumneger0/chez-tui/chezmoi"
 )
 
 var (
@@ -31,7 +30,7 @@ type customDelegate struct {
 }
 
 func (d customDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	entry, ok := item.(fileEntry)
+	entry, ok := item.(chezmoi.FileEntry)
 	if !ok {
 		return
 	}
@@ -48,19 +47,10 @@ func (d customDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	}
 }
 
-func getChezmoiSourceDir() (string, error) {
-	userHomeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userHomeDir, ".local", "share", "chezmoi"), nil
-}
-
 var keyBindings = []struct {
 	key         string
 	description string
 }{
-	{key: "q", description: "Quit"},
 	{key: "a", description: "Add file"},
 	{key: "r", description: "Remove file"},
 	{key: "e", description: "Edit file"},
@@ -69,66 +59,21 @@ var keyBindings = []struct {
 	{key: "A", description: "Apply changes"},
 }
 
-const command = "chezmoi"
-
-type fileEntry struct {
-	Name      string
-	Path      string
-	IsManaged bool
-}
-
-func (i fileEntry) Title() string       { return i.Name }
-func (i fileEntry) Description() string { return i.Name }
-func (i fileEntry) FilterValue() string { return i.Name }
-
 type model struct {
 	files list.Model
 }
 
-func (m model) setWindowTitle() string {
-	return "Cheztui"
-}
-
-func isChezmoiInstalled() bool {
-	_, err := exec.LookPath(command)
-	return err == nil
-}
-
-func isChezmoiInitialized() bool {
-	chezmoiSourceDir, err := getChezmoiSourceDir()
-	//TODO:migrate to use better-go
+func getAbsolutePath(path string) (string, error) {
+	userHomeDir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Println(err.Error())
-		return false
+		return "", err
 	}
-	_, err = os.Stat(chezmoiSourceDir)
-	return err == nil
-}
-
-func getChezmoiManagedFiles() ([]list.Item, error) {
-
-	output, err := exec.Command(command, "managed").Output()
-	//TODO:migrate to use better-go
-	if err != nil {
-		return nil, err
-	}
-	files := strings.Split(string(output), "\n")
-
-	allManagedFilesEntery := []list.Item{}
-
-	for i := range files {
-		path := strings.Trim(files[i], " ")
-		//migrate to better-go
-
-		allManagedFilesEntery = append(allManagedFilesEntery, fileEntry{Name: path, Path: path, IsManaged: true})
-	}
-	return allManagedFilesEntery, nil
+	return filepath.Join(userHomeDir, path), nil
 }
 
 func (m model) Init() tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command(command, "status")
-		err := cmd.Run()
+		err := chezmoi.RunChezmoiCommand("status")
 		if err != nil {
 			return tea.Printf("Error: %v", err)
 		}
@@ -140,13 +85,63 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		selectedFile := m.files.SelectedItem()
 		switch msg.String() {
+
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "a":
-			selectedFile := m.files.SelectedItem()
 			if selectedFile != nil {
-				fmt.Println(selectedFile.FilterValue())
+				path, err := getAbsolutePath(selectedFile.FilterValue())
+				if err != nil {
+					fmt.Println("Error getting absolute path:", err)
+				}
+				fmt.Println("Adding file:", path)
+				err = chezmoi.AddFile(path)
+				if err != nil {
+					fmt.Println(err.Error())
+				} else {
+					// figure out a way to show nice toast message
+				}
+			}
+		case "r":
+			if selectedFile != nil {
+				path, err := getAbsolutePath(selectedFile.FilterValue())
+				if err != nil {
+					fmt.Println("Error getting absolute path:", err)
+				}
+				err = chezmoi.ForgetFile(path)
+				if err != nil {
+					//TODO: figure out a way to show nice toast message
+				} else {
+					//TODO: figure out a way to show nice toast message
+				}
+			}
+		case "e":
+			if selectedFile != nil {
+				path, err := getAbsolutePath(selectedFile.FilterValue())
+				if err != nil {
+					fmt.Println("Error getting absolute path:", err)
+				}
+				err = chezmoi.EditFile(path)
+				if err != nil {
+					//TODO: figure out a way to show nice toast message
+				} else {
+					//TODO: figure out a way to show nice toast message
+				}
+			}
+		case "A":
+			if selectedFile != nil {
+				err := chezmoi.RunChezmoiCommand("apply")
+            if err != nil {
+					//TODO: figure out a way to show nice toast message
+				} else {
+					//TODO: figure out a way to show nice toast message
+				}
+			}
+		case "p":
+			if selectedFile != nil {
+				//TODO: push to github
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -161,18 +156,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	listView := m.files.View()
-
 	return docStyle.Render(listView)
 }
 
 func main() {
-	if !isChezmoiInstalled() {
+	if !chezmoi.IsChezmoiInstalled() {
 		fmt.Println("Chezmoi is not installed please install chezmoi first")
 		os.Exit(1)
 		return
 	}
 
-	if !isChezmoiInitialized() {
+	if !chezmoi.IsChezmoiInitialized() {
 		fmt.Println("Chezmoi is not initialized please initialize chezmoi first")
 		var userPromt string = "y"
 		fmt.Print("Do you want to us to initialize it for you [Y/n]?")
@@ -185,8 +179,7 @@ func main() {
 		}
 
 		if userPromt == "y" || userPromt == "Y" {
-			cmd := exec.Command(command, "init")
-			err := cmd.Run()
+			err := chezmoi.RunChezmoiCommand("init")
 			if err != nil {
 				fmt.Println("Error:", err)
 			}
@@ -196,7 +189,7 @@ func main() {
 		}
 	}
 
-	managedFiles, err := getChezmoiManagedFiles()
+	managedFiles, err := chezmoi.GetChezmoiManagedFiles()
 
 	//TODO:migrate to use better-go
 	if err != nil {
@@ -208,23 +201,18 @@ func main() {
 
 	bubleList := list.New(managedFiles, customDelegate{}, 0, 0)
 	bubleList.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
-			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add file")),
-			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove file")),
-			key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit file")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "push to GitHub")),
-			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "show diff")),
-			key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "apply changes")),
+		var keys []key.Binding
+		for _, v := range keyBindings {
+			newKey := key.NewBinding(key.WithKeys(v.key), key.WithHelp(v.key, v.description))
+			//TODO: use better-go
+			keys = append(keys, newKey)
 		}
+		return keys
 	}
 
 	m := model{files: bubleList}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	styles := list.DefaultStyles()
-	styles.HelpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
 
 	_, err = p.Run()
 	if err != nil {
