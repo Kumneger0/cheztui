@@ -4,17 +4,22 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kumneger0/chez-tui/utils"
 )
 
 type FileEntry struct {
 	Name      string
 	Path      string
 	IsManaged bool
+	isDir     bool
+}
+
+type tempDir struct {
+	path string
 }
 
 type AltarnateScreeenExec struct{ error }
@@ -30,12 +35,7 @@ func IsChezmoiInstalled() bool {
 }
 
 func getChezmoiSourceDir() (string, error) {
-	userHomeDir, err := os.UserHomeDir()
-	//TODO:migrate to better-go
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userHomeDir, ".local", "share", "chezmoi"), nil
+	return utils.GetAbsolutePath(".local/share/chezmoi")
 }
 
 func IsChezmoiInitialized() bool {
@@ -49,6 +49,17 @@ func IsChezmoiInitialized() bool {
 	return err == nil
 }
 
+func IsDir(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+		return false
+	}
+	return fileInfo.IsDir()
+}
+
 func GetChezmoiManagedFiles() ([]list.Item, error) {
 	output, err := exec.Command(Command, "managed").Output()
 	//TODO:migrate to use better-go
@@ -59,13 +70,34 @@ func GetChezmoiManagedFiles() ([]list.Item, error) {
 
 	var allManagedFilesEntery []list.Item
 
+	var currentTempDir tempDir
+
 	for i := range files {
 		path := strings.Trim(files[i], " ")
 		if path == "" {
 			continue
 		}
+		absolutePah, err := utils.GetAbsolutePath(path)
+
+		if err != nil {
+			return nil, err
+		}
+
+		isCurrentPathDir := IsDir(absolutePah)
+
+		if isCurrentPathDir {
+			currentTempDir = tempDir{path: path}
+		} else {
+			pathSplited := strings.Split(path, "/")
+			path = pathSplited[0]
+
+			if path == currentTempDir.path {
+				continue
+			}
+		}
+
 		//TODO: migrate to better-go
-		allManagedFilesEntery = append(allManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: true})
+		allManagedFilesEntery = append(allManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: true, isDir: isCurrentPathDir})
 	}
 	return allManagedFilesEntery, nil
 }
@@ -80,13 +112,35 @@ func GetUnmanagedFiles() ([]list.Item, error) {
 
 	unmangedfiles := strings.Split(string(unmanaged), "\n")
 
+	var currentTempDir tempDir
+
 	for i := range unmangedfiles {
 		path := strings.Trim(unmangedfiles[i], " ")
 		if path == "" {
 			continue
 		}
+
+		absolutePah, err := utils.GetAbsolutePath(path)
+
+		if err != nil {
+			return nil, err
+		}
+
+		isCurrentPathDir := IsDir(absolutePah)
+
+		if isCurrentPathDir {
+			currentTempDir = tempDir{path: path}
+		} else {
+			pathSplited := strings.Split(path, "/")
+			path = pathSplited[0]
+
+			if path == currentTempDir.path {
+				continue
+			}
+		}
+
 		//TODO: migrate to better-go
-		allUnManagedFilesEntery = append(allUnManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: false})
+		allUnManagedFilesEntery = append(allUnManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: false, isDir: isCurrentPathDir})
 	}
 	return allUnManagedFilesEntery, nil
 }
@@ -125,9 +179,18 @@ func RunChezmoiCommandInteractive(command ...string) error {
 	}
 	return nil
 }
-
+func ExecuteInGoRoutine(fn func() error) {
+	go func() {
+		if err := fn(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+	}()
+}
 func AddFile(path string) error {
-	return RunChezmoiCommandInteractive("add", path)
+	ExecuteInGoRoutine(func() error {
+		return RunChezmoiCommandInteractive("add", path)
+	})
+	return nil
 }
 
 func ForgetFile(path string) error {

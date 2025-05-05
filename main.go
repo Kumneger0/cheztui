@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kumneger0/chez-tui/chezmoi"
+	"github.com/kumneger0/chez-tui/utils"
 )
 
 var (
@@ -68,6 +69,8 @@ var keyBindings = []struct {
 }
 
 type model struct {
+	filepicker        filepicker.Model
+	isOnFilePicker    bool
 	files             list.Model
 	isAltranateScreen bool
 	toast             *toast
@@ -99,23 +102,8 @@ func renderToast(msg string) string {
 	return style.Render(msg)
 }
 
-func getAbsolutePath(path string) (string, error) {
-	userHomeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userHomeDir, path), nil
-}
-
 func (m model) Init() tea.Cmd {
-	return func() tea.Msg {
-		err := chezmoi.RunChezmoiCommand("status")
-		if err != nil {
-			return tea.Printf("Error: %v", err)
-		}
-		return nil
-	}
-
+	return m.filepicker.Init()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -153,7 +141,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.files.SetItems(unmanagedFiles)
 		case "a":
 			if selectedFile != nil {
-				path, err := getAbsolutePath(selectedFile.FilterValue())
+				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				}
@@ -171,7 +159,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			if selectedFile != nil {
-				path, err := getAbsolutePath(selectedFile.FilterValue())
+				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				}
@@ -188,7 +176,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d":
 			if selectedFile != nil {
-				path, err := getAbsolutePath(selectedFile.FilterValue())
+				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				}
@@ -198,7 +186,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "e":
 			if selectedFile != nil {
-				path, err := getAbsolutePath(selectedFile.FilterValue())
+				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				}
@@ -222,6 +210,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if selectedFile != nil {
 				//TODO: push to github
 			}
+		case "enter":
+			if selectedFile != nil {
+				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
+				if err != nil {
+					return m, showToast(err.Error(), 2*time.Second)
+				}
+
+				m.filepicker.AllowedTypes = []string{"*"}
+				m.filepicker.CurrentDirectory = path
+
+				m.isOnFilePicker = true
+			}
 		}
 	case chezmoi.AltarnateScreeenExec:
 		m.isAltranateScreen = false
@@ -238,6 +238,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.isOnFilePicker {
+		return fmt.Sprintf(
+			"\n  %s\n\n%s",
+			"Pick a file:",
+			m.filepicker.View(),
+		)
+	}
+
 	if m.isAltranateScreen {
 		fmt.Println("running diff")
 		return ""
@@ -254,10 +262,15 @@ func (m model) View() string {
 	}
 
 	return baseView
-
 }
 
 func main() {
+
+	err := chezmoi.RunChezmoiCommand("status")
+	if err != nil {
+		tea.Printf("Error: %v", err)
+	}
+
 	if !chezmoi.IsChezmoiInstalled() {
 		fmt.Println("Chezmoi is not installed please install chezmoi first")
 		os.Exit(1)
@@ -297,6 +310,8 @@ func main() {
 
 	}
 
+	fp := filepicker.New()
+
 	bubleList := list.New(managedFiles, customDelegate{}, 0, 0)
 	bubleList.AdditionalFullHelpKeys = func() []key.Binding {
 		var keys []key.Binding
@@ -308,11 +323,9 @@ func main() {
 		return keys
 	}
 
-	m := model{files: bubleList}
+	m := model{files: bubleList, filepicker: fp}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
-
-
 
 	_, err = p.Run()
 	if err != nil {
