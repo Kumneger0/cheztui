@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kumneger0/chez-tui/chezmoi"
+	"github.com/kumneger0/chez-tui/helpers.go"
 	"github.com/kumneger0/chez-tui/utils"
 )
 
@@ -37,7 +38,7 @@ type customDelegate struct {
 }
 
 func (d customDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	entry, ok := item.(chezmoi.FileEntry)
+	entry, ok := item.(helpers.FileEntry)
 	if !ok {
 		return
 	}
@@ -68,11 +69,10 @@ var keyBindings = []struct {
 	{key: "u", description: "Show only unmanaged files"},
 }
 
-type model struct {
-	filepicker        filepicker.Model
-	isOnFilePicker    bool
+type Model struct {
 	files             list.Model
 	isAltranateScreen bool
+	currentDir        string
 	toast             *toast
 }
 
@@ -102,11 +102,11 @@ func renderToast(msg string) string {
 	return style.Render(msg)
 }
 
-func (m model) Init() tea.Cmd {
-	return m.filepicker.Init()
+func (m Model) Init() tea.Cmd {
+	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case toastMsg:
@@ -117,6 +117,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Tick(time.Until(msg.expires), func(t time.Time) tea.Msg {
 			return clearToastMsg{}
 		})
+
 	case clearToastMsg:
 		m.toast = nil
 		return m, nil
@@ -127,25 +128,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
 		case "m":
 			managedFiles, err := chezmoi.GetChezmoiManagedFiles()
 			if err != nil {
 				return m, showToast(err.Error(), 2*time.Second)
 			}
 			m.files.SetItems(managedFiles)
+
 		case "u":
 			unmanagedFiles, err := chezmoi.GetUnmanagedFiles()
 			if err != nil {
 				return m, showToast(err.Error(), 2*time.Second)
 			}
 			m.files.SetItems(unmanagedFiles)
+
 		case "a":
 			if selectedFile != nil {
-				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				}
-				err = chezmoi.AddFile(path)
+				path := filepath.Join(m.currentDir, selectedFile.FilterValue())
+				err := chezmoi.AddFile(path)
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				} else {
@@ -157,13 +158,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, showToast("File added successfully", 2*time.Second)
 				}
 			}
+
 		case "r":
 			if selectedFile != nil {
-				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				}
-				err = chezmoi.ForgetFile(path)
+				path := filepath.Join(m.currentDir, selectedFile.FilterValue())
+				err := chezmoi.ForgetFile(path)
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				} else {
@@ -174,24 +173,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.files.SetItems(updatedFiles)
 				}
 			}
+
 		case "d":
 			if selectedFile != nil {
-				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				}
+				path := filepath.Join(m.currentDir, selectedFile.FilterValue())
 				m.isAltranateScreen = true
-
 				return m, chezmoi.DiffFile(path)
 			}
+
 		case "e":
 			if selectedFile != nil {
-				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
+				fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.files.Items())
+				if fileProperty.IsDir {
+					return m, showToast("Cannot edit directory", 2*time.Second)
 				}
+				path := filepath.Join(m.currentDir, selectedFile.FilterValue())
 				return m, chezmoi.EditFile(path)
 			}
+
 		case "A":
 			if selectedFile != nil {
 				err := chezmoi.RunChezmoiCommandInteractive("apply")
@@ -206,23 +205,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, showToast("Changes applied successfully", 2*time.Second)
 				}
 			}
+
 		case "p":
 			if selectedFile != nil {
-				//TODO: push to github
+				// TODO: push to GitHub
 			}
+
 		case "enter":
 			if selectedFile != nil {
-				path, err := utils.GetAbsolutePath(selectedFile.FilterValue())
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
+				fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.files.Items())
+
+				if !fileProperty.IsDir {
+					return m, showToast("Cannot navigate to file", 2*time.Second)
 				}
 
-				m.filepicker.AllowedTypes = []string{"*"}
-				m.filepicker.CurrentDirectory = path
-
-				m.isOnFilePicker = true
+				fullPath := filepath.Join(m.currentDir, selectedFile.FilterValue())
+				filesNewDir, err := utils.GetFilesFromSpecificPath(fullPath)
+				if err != nil {
+					fmt.Println("There was an error while navigating to new directory", err.Error())
+				}
+				filesNewDir = append([]list.Item{helpers.FileEntry{Name: "..", Path: "..", IsManaged: false, IsDir: true, BackButton: true}}, filesNewDir...)
+				m.files.SetItems(filesNewDir)
+				m.currentDir = fullPath
 			}
+
+			return m, nil
 		}
+
 	case chezmoi.AltarnateScreeenExec:
 		m.isAltranateScreen = false
 		return m, nil
@@ -237,35 +246,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) View() string {
-	if m.isOnFilePicker {
-		return fmt.Sprintf(
-			"\n  %s\n\n%s",
-			"Pick a file:",
-			m.filepicker.View(),
-		)
-	}
-
-	if m.isAltranateScreen {
-		fmt.Println("running diff")
-		return ""
-	}
-
-	m.files.Title = "Cheztui"
+func (m Model) View() string {
 	listView := m.files.View()
-
-	baseView := lipgloss.JoinHorizontal(lipgloss.Center, listView)
+	m.files.Title = "Chezmoi Files"
 
 	if m.toast != nil && time.Now().Before(m.toast.expires) {
 		toastView := renderToast(m.toast.message)
-		return baseView + "\n" + toastView
+		return listView + "\n" + toastView
 	}
 
-	return baseView
+	return docStyle.Render(listView)
 }
 
 func main() {
-
 	err := chezmoi.RunChezmoiCommand("status")
 	if err != nil {
 		tea.Printf("Error: %v", err)
@@ -283,7 +276,6 @@ func main() {
 		fmt.Print("Do you want to us to initialize it for you [Y/n]?")
 		_, err := fmt.Scan(&userPromt)
 
-		//TODO:migrate to update this to use better-go
 		if err != nil {
 			fmt.Println("Error reading input:", err)
 			os.Exit(1)
@@ -301,29 +293,24 @@ func main() {
 	}
 
 	managedFiles, err := chezmoi.GetAllFiles()
-
-	//TODO:migrate to use better-go
 	if err != nil {
 		fmt.Println("Error getting managed files:", err)
 		os.Exit(1)
 		return
-
 	}
-
-	fp := filepicker.New()
 
 	bubleList := list.New(managedFiles, customDelegate{}, 0, 0)
 	bubleList.AdditionalFullHelpKeys = func() []key.Binding {
 		var keys []key.Binding
 		for _, v := range keyBindings {
 			newKey := key.NewBinding(key.WithKeys(v.key), key.WithHelp(v.key, v.description))
-			//TODO: use better-go
 			keys = append(keys, newKey)
 		}
 		return keys
 	}
+	currentDir, _ := os.UserHomeDir()
 
-	m := model{files: bubleList, filepicker: fp}
+	m := Model{files: bubleList, currentDir: currentDir}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -333,5 +320,4 @@ func main() {
 		os.Exit(1)
 		return
 	}
-
 }

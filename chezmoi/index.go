@@ -8,24 +8,15 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kumneger0/chez-tui/helpers.go"
 	"github.com/kumneger0/chez-tui/utils"
 )
-
-type FileEntry struct {
-	Name      string
-	Path      string
-	IsManaged bool
-	isDir     bool
-}
 
 type tempDir struct {
 	path string
 }
 
 type AltarnateScreeenExec struct{ error }
-
-func (f FileEntry) Title() string       { return f.Name }
-func (f FileEntry) FilterValue() string { return f.Name }
 
 const Command = "chezmoi"
 
@@ -97,7 +88,7 @@ func GetChezmoiManagedFiles() ([]list.Item, error) {
 		}
 
 		//TODO: migrate to better-go
-		allManagedFilesEntery = append(allManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: true, isDir: isCurrentPathDir})
+		allManagedFilesEntery = append(allManagedFilesEntery, helpers.FileEntry{Name: path, Path: path, IsManaged: true, IsDir: isCurrentPathDir})
 	}
 	return allManagedFilesEntery, nil
 }
@@ -140,7 +131,7 @@ func GetUnmanagedFiles() ([]list.Item, error) {
 		}
 
 		//TODO: migrate to better-go
-		allUnManagedFilesEntery = append(allUnManagedFilesEntery, FileEntry{Name: path, Path: path, IsManaged: false, isDir: isCurrentPathDir})
+		allUnManagedFilesEntery = append(allUnManagedFilesEntery, helpers.FileEntry{Name: path, Path: path, IsManaged: false, IsDir: isCurrentPathDir})
 	}
 	return allUnManagedFilesEntery, nil
 }
