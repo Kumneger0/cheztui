@@ -199,8 +199,8 @@ func EditFile(path string) tea.Cmd {
 	})
 }
 
-func DiffFile(path string) tea.Cmd {
-	c := exec.Command(Command, "diff", path)
+func Diff(path ...string) tea.Cmd {
+	c := exec.Command(Command, append([]string{"diff"}, path...)...)
 
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout

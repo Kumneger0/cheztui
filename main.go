@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/kumneger0/chez-tui/chezmoi"
 	"github.com/kumneger0/chez-tui/core"
 )
@@ -18,8 +19,9 @@ var keyBindings = []struct {
 	{key: "a", description: "Add file"},
 	{key: "r", description: "Remove file"},
 	{key: "e", description: "Edit file"},
-	{key: "p", description: "Push to GitHub"},
-	{key: "d", description: "Show diff"},
+	{key: "d", description: "Show diff for Current File"},
+	{key: "enter", description: "Navigate to directory"},
+	{key: "D", description: "Show Diffs For All Files"},
 	{key: "A", description: "Apply changes"},
 	{key: "L", description: "list all files"},
 	{key: "m", description: "Show only managed files"},
@@ -40,16 +42,26 @@ func main() {
 
 	if !chezmoi.IsChezmoiInitialized() {
 		fmt.Println("Chezmoi is not initialized please initialize chezmoi first")
-		var userPromt string = "y"
-		fmt.Print("Do you want to us to initialize it for you [Y/n]?")
-		_, err := fmt.Scan(&userPromt)
 
+		var confirm bool
+
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Do you want to us to initialize it for you?").
+					Affirmative("Yes!").
+					Negative("No.").
+					Value(&confirm),
+			),
+		)
+
+		err = form.Run()
 		if err != nil {
-			fmt.Println("Error reading input:", err)
-			os.Exit(1)
+			fmt.Println("Error:", err)
+			return
 		}
 
-		if userPromt == "y" || userPromt == "Y" {
+		if confirm {
 			err := chezmoi.RunChezmoiCommand("init")
 			if err != nil {
 				fmt.Println("Error:", err)

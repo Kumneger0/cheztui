@@ -92,7 +92,6 @@ func renderToast(msg string) string {
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Padding(0, 1).
 		Bold(true)
-
 	return style.Render(msg)
 }
 
@@ -102,186 +101,271 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case toastMsg:
-		m.Toast = &toast{
-			message: msg.message,
-			expires: msg.expires,
-		}
-		return m, tea.Tick(time.Until(msg.expires), func(t time.Time) tea.Msg {
-			return clearToastMsg{}
-		})
-
+		return handleToastMsg(m, msg)
 	case clearToastMsg:
-		m.Toast = nil
-		return m, nil
-
+		return handleClearToastMsg(m)
 	case tea.KeyMsg:
-		selectedFile := m.Files.SelectedItem()
-		switch msg.String() {
-
-		case "ctrl+c", "q":
-			return m, tea.Quit
-
-		case "m":
-			var managedFiles []list.Item
-			userHomeDir, _ := os.UserHomeDir()
-			if userHomeDir == m.CurrentDir {
-				managedFiles, _ = chezmoi.GetChezmoiManagedFiles()
-				return m, m.Files.SetItems(managedFiles)
-			}
-
-			managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
-			return m, m.Files.SetItems(managedFiles)
-		case "u":
-
-			var unmanagedFiles []list.Item
-			userHomeDir, _ := os.UserHomeDir()
-
-			if userHomeDir == m.CurrentDir {
-				unmanagedFiles, _ = chezmoi.GetUnmanagedFiles()
-				return m, m.Files.SetItems(unmanagedFiles)
-			}
-			unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
-			return m, m.Files.SetItems(unmanagedFiles)
-
-		case "a":
-			if selectedFile != nil {
-				path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
-				err := chezmoi.AddFile(path)
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				} else {
-
-					var updatedFiles []list.Item
-					userHomeDir, _ := os.UserHomeDir()
-
-					if userHomeDir == m.CurrentDir {
-						updatedFiles, err = chezmoi.GetAllFiles()
-
-					} else {
-						updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
-					}
-
-					if err != nil {
-						return m, showToast(err.Error(), 2*time.Second)
-					}
-					m.Files.SetItems(updatedFiles)
-					return m, showToast("File added successfully", 2*time.Second)
-				}
-			}
-		case "L":
-			var managedFiles []list.Item
-			userHomeDir, _ := os.UserHomeDir()
-			if userHomeDir == m.CurrentDir {
-				managedFiles, _ = chezmoi.GetAllFiles()
-				return m, m.Files.SetItems(managedFiles)
-			}
-			managedFiles, _ = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
-			return m, m.Files.SetItems(managedFiles)
-
-		case "r":
-			if selectedFile != nil {
-				path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
-				err := chezmoi.ForgetFile(path)
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				} else {
-
-					userHomeDir, _ := os.UserHomeDir()
-					var updatedFiles []list.Item
-
-					if userHomeDir == m.CurrentDir {
-						updatedFiles, err = chezmoi.GetAllFiles()
-					} else {
-						updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
-					}
-
-					if err != nil {
-						return m, showToast(err.Error(), 2*time.Second)
-					}
-					m.Files.SetItems(updatedFiles)
-				}
-			}
-
-		case "d":
-			if selectedFile != nil {
-				path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
-				m.IsAltranateScreen = true
-				return m, chezmoi.DiffFile(path)
-			}
-
-		case "e":
-			if selectedFile != nil {
-				fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.Files.Items())
-				if fileProperty.IsDir {
-					return m, showToast("Cannot edit directory", 2*time.Second)
-				}
-				path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
-				return m, chezmoi.EditFile(path)
-			}
-
-		case "A":
-			if selectedFile != nil {
-				err := chezmoi.RunChezmoiCommandInteractive("apply")
-				if err != nil {
-					return m, showToast(err.Error(), 2*time.Second)
-				} else {
-					return m, showToast("Changes applied successfully", 2*time.Second)
-				}
-			}
-
-		case "p":
-			if selectedFile != nil {
-				// TODO: push to GitHub
-			}
-
-		case "enter":
-			if selectedFile != nil {
-				fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.Files.Items())
-
-				if !fileProperty.IsDir {
-					return m, showToast("Cannot navigate to file", 2*time.Second)
-				}
-				fullPath := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
-				homeDir, _ := os.UserHomeDir()
-
-				if fullPath == homeDir {
-					allFiles, _ := chezmoi.GetAllFiles()
-					m.Files.SetItems(allFiles)
-					m.CurrentDir = homeDir
-					return m, nil
-				}
-
-				filesNewDir, err := utils.GetFilesFromSpecificPath(fullPath)
-				if err != nil {
-					fmt.Println("There was an error while navigating to new directory", err.Error())
-				}
-				filesNewDir = append([]list.Item{helpers.FileEntry{Name: "..", Path: "..", IsManaged: false, IsDir: true, BackButton: true}}, filesNewDir...)
-				m.Files.SetItems(filesNewDir)
-				m.CurrentDir = fullPath
-			}
-
-			return m, nil
-		}
-
+		return handleKeyMsg(m, msg)
 	case chezmoi.AltarnateScreeenExec:
-		m.IsAltranateScreen = false
-		return m, nil
-
+		return handleAlternateScreenExec(m)
 	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.Files.SetSize(msg.Width-h, msg.Height-v)
+		return handleWindowSizeMsg(m, msg)
+	default:
+		return updateFilesList(m, msg)
 	}
+}
 
+func handleToastMsg(m Model, msg toastMsg) (tea.Model, tea.Cmd) {
+	m.Toast = &toast{
+		message: msg.message,
+		expires: msg.expires,
+	}
+	return m, tea.Tick(time.Until(msg.expires), func(t time.Time) tea.Msg {
+		return clearToastMsg{}
+	})
+}
+
+func handleClearToastMsg(m Model) (tea.Model, tea.Cmd) {
+	m.Toast = nil
+	return m, nil
+}
+
+func handleAlternateScreenExec(m Model) (tea.Model, tea.Cmd) {
+	m.IsAltranateScreen = false
+	return m, nil
+}
+
+func handleWindowSizeMsg(m Model, msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	h, v := docStyle.GetFrameSize()
+	m.Files.SetSize(msg.Width-h, msg.Height-v)
+	return updateFilesList(m, msg)
+}
+
+func updateFilesList(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.Files, cmd = m.Files.Update(msg)
 	return m, cmd
 }
 
+func handleKeyMsg(m Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	selectedFile := m.Files.SelectedItem()
+
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case "m":
+		return handleManagedFilesView(m)
+	case "u":
+		return handleUnmanagedFilesView(m)
+	case "a":
+		return handleAddFile(m, selectedFile)
+	case "L":
+		return handleListAllFiles(m)
+	case "r":
+		return handleRemoveFile(m, selectedFile)
+	case "d":
+		return handleDiffFile(m, selectedFile)
+	case "D":
+		return handleDiffAllFiles(m)
+	case "e":
+		return handleEditFile(m, selectedFile)
+	case "A":
+		return handleApplyChanges(m, selectedFile)
+	case "p":
+		if selectedFile != nil {
+			// TODO: push to GitHub
+		}
+		return m, nil
+	case "enter":
+		return handleNavigateDirectory(m, selectedFile)
+	default:
+		return updateFilesList(m, msg)
+	}
+}
+
+func handleManagedFilesView(m Model) (tea.Model, tea.Cmd) {
+	var managedFiles []list.Item
+	userHomeDir, _ := os.UserHomeDir()
+
+	if userHomeDir == m.CurrentDir {
+		managedFiles, _ = chezmoi.GetChezmoiManagedFiles()
+	} else {
+		managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
+	}
+
+	return m, m.Files.SetItems(managedFiles)
+}
+
+func handleUnmanagedFilesView(m Model) (tea.Model, tea.Cmd) {
+	var unmanagedFiles []list.Item
+	userHomeDir, _ := os.UserHomeDir()
+
+	if userHomeDir == m.CurrentDir {
+		unmanagedFiles, _ = chezmoi.GetUnmanagedFiles()
+	} else {
+		unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
+	}
+
+	return m, m.Files.SetItems(unmanagedFiles)
+}
+
+func handleAddFile(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+	err := chezmoi.AddFile(path)
+
+	if err != nil {
+		return m, showToast(err.Error(), 2*time.Second)
+	}
+
+	var updatedFiles []list.Item
+	userHomeDir, _ := os.UserHomeDir()
+
+	if userHomeDir == m.CurrentDir {
+		updatedFiles, err = chezmoi.GetAllFiles()
+	} else {
+		updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+	}
+
+	if err != nil {
+		return m, showToast(err.Error(), 2*time.Second)
+	}
+
+	m.Files.SetItems(updatedFiles)
+	return m, showToast("File added successfully", 2*time.Second)
+}
+
+func handleListAllFiles(m Model) (tea.Model, tea.Cmd) {
+	var allFiles []list.Item
+	userHomeDir, _ := os.UserHomeDir()
+
+	if userHomeDir == m.CurrentDir {
+		allFiles, _ = chezmoi.GetAllFiles()
+	} else {
+		allFiles, _ = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+	}
+
+	return m, m.Files.SetItems(allFiles)
+}
+
+func handleRemoveFile(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+	err := chezmoi.ForgetFile(path)
+
+	if err != nil {
+		return m, showToast(err.Error(), 2*time.Second)
+	}
+
+	userHomeDir, _ := os.UserHomeDir()
+	var updatedFiles []list.Item
+
+	if userHomeDir == m.CurrentDir {
+		updatedFiles, err = chezmoi.GetAllFiles()
+	} else {
+		updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+	}
+
+	if err != nil {
+		return m, showToast(err.Error(), 2*time.Second)
+	}
+
+	m.Files.SetItems(updatedFiles)
+	return m, nil
+}
+
+func handleDiffFile(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+	m.IsAltranateScreen = true
+	return m, chezmoi.Diff(path)
+}
+
+func handleDiffAllFiles(m Model) (tea.Model, tea.Cmd) {
+	m.IsAltranateScreen = true
+	return m, chezmoi.Diff()
+}
+
+func handleEditFile(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.Files.Items())
+	if fileProperty.IsDir {
+		return m, showToast("Cannot edit directory", 2*time.Second)
+	}
+
+	path := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+	return m, chezmoi.EditFile(path)
+}
+
+func handleApplyChanges(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	err := chezmoi.RunChezmoiCommandInteractive("apply")
+	if err != nil {
+		return m, showToast(err.Error(), 2*time.Second)
+	}
+
+	return m, showToast("Changes applied successfully", 2*time.Second)
+}
+
+func handleNavigateDirectory(m Model, selectedFile list.Item) (tea.Model, tea.Cmd) {
+	if selectedFile == nil {
+		return m, nil
+	}
+
+	fileProperty := utils.FindFileProperty(selectedFile.FilterValue(), m.Files.Items())
+	if !fileProperty.IsDir {
+		return m, showToast("Cannot navigate to file", 2*time.Second)
+	}
+
+	fullPath := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+	homeDir, _ := os.UserHomeDir()
+
+	if fullPath == homeDir {
+		allFiles, _ := chezmoi.GetAllFiles()
+		m.Files.SetItems(allFiles)
+		m.CurrentDir = homeDir
+		return m, nil
+	}
+
+	filesNewDir, err := utils.GetFilesFromSpecificPath(fullPath)
+	if err != nil {
+		fmt.Println("There was an error while navigating to new directory", err.Error())
+	}
+
+	filesNewDir = append([]list.Item{helpers.FileEntry{
+		Name:       "..",
+		Path:       "..",
+		IsManaged:  false,
+		IsDir:      true,
+		BackButton: true,
+	}}, filesNewDir...)
+
+	m.Files.SetItems(filesNewDir)
+	m.CurrentDir = fullPath
+	return m, nil
+}
+
 func (m Model) View() string {
-	listView := m.Files.View()
 	m.Files.Title = "Chezmoi Files"
+	m.Files.SetShowTitle(true)
+	
+	listView := m.Files.View()
 
 	if m.Toast != nil && time.Now().Before(m.Toast.expires) {
 		toastView := renderToast(m.Toast.message)
