@@ -13,6 +13,11 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
 - **Notifications**: Get instant feedback on what’s happening with toast messages.
 - **Switch Views**: Easily toggle between different screens for specific tasks(eg editing a file).
 
+
+## What You’ll Need
+
+- [chezmoi](https://www.chezmoi.io/): Make sure it’s installed and set up.
+
 ## How to Use It
 
 1. Clone the repo:
@@ -21,15 +26,24 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
    cd cheztui
    ```
 
-2. Build the app:
+2. Install dependencies:
+   ```bash
+   go mod tidy
+   ```
+
+3. Build the app:
    ```bash
    go build -o cheztui main.go
    ```
 
-3. Run it:
+4. Run it:
    ```bash
    ./cheztui
    ```
+
+
+
+
 
 ## Key Shortcuts with Equivalent chezmoi Commands
 
@@ -73,12 +87,18 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
 - `esc`: Close the file picker or go back (no direct chezmoi equivalent; used for navigation in the TUI).
 - `ctrl+c` or `q`: Quit the app (no direct chezmoi equivalent; used to exit the TUI).
 
-## What You’ll Need
+## Major Dependencies
 
-- [chezmoi](https://www.chezmoi.io/): Make sure it’s installed and set up.
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea): For the terminal UI.
-- [Bubbles](https://github.com/charmbracelet/bubbles): For cool components like file pickers.
-- [Lip Gloss](https://github.com/charmbracelet/lipgloss): For styling the interface.
+Chez-TUI is built using the following major dependencies:
+
+- [chezmoi](https://www.chezmoi.io/): The core tool for managing dotfiles.
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea): A powerful, fun, and flexible Go framework for building terminal applications.
+- [Bubbles](https://github.com/charmbracelet/bubbles): Components for Bubble Tea, like lists, file pickers.
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss): A Go library for styling terminal applications.
+
+- [Huh](https://github.com/charmbracelet/huh): A Go library for creating interactive terminal forms.
+
+
 
 ## Want to Help?
 
