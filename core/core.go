@@ -124,15 +124,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "m":
-
 			var managedFiles []list.Item
 			userHomeDir, _ := os.UserHomeDir()
 			if userHomeDir == m.CurrentDir {
-				managedFiles, _ = chezmoi.GetAllFiles()
-			} else {
-				managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
+				managedFiles, _ = chezmoi.GetChezmoiManagedFiles()
+				return m, m.Files.SetItems(managedFiles)
 			}
 
+			managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
 			return m, m.Files.SetItems(managedFiles)
 		case "u":
 
@@ -141,10 +140,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if userHomeDir == m.CurrentDir {
 				unmanagedFiles, _ = chezmoi.GetUnmanagedFiles()
-			} else {
-				unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
+				return m, m.Files.SetItems(unmanagedFiles)
 			}
-
+			unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
 			return m, m.Files.SetItems(unmanagedFiles)
 
 		case "a":
@@ -172,6 +170,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, showToast("File added successfully", 2*time.Second)
 				}
 			}
+		case "L":
+			var managedFiles []list.Item
+			userHomeDir, _ := os.UserHomeDir()
+			if userHomeDir == m.CurrentDir {
+				managedFiles, _ = chezmoi.GetAllFiles()
+				return m, m.Files.SetItems(managedFiles)
+			}
+			managedFiles, _ = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+			return m, m.Files.SetItems(managedFiles)
 
 		case "r":
 			if selectedFile != nil {
@@ -180,7 +187,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					updatedFiles, err := chezmoi.GetChezmoiManagedFiles()
+
+					userHomeDir, _ := os.UserHomeDir()
+					var updatedFiles []list.Item
+
+					if userHomeDir == m.CurrentDir {
+						updatedFiles, err = chezmoi.GetAllFiles()
+					} else {
+						updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+					}
+
 					if err != nil {
 						return m, showToast(err.Error(), 2*time.Second)
 					}
@@ -211,11 +227,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					updatedFiles, err := chezmoi.GetChezmoiManagedFiles()
-					if err != nil {
-						return m, showToast(err.Error(), 2*time.Second)
-					}
-					m.Files.SetItems(updatedFiles)
 					return m, showToast("Changes applied successfully", 2*time.Second)
 				}
 			}

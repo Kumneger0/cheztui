@@ -21,6 +21,7 @@ var keyBindings = []struct {
 	{key: "p", description: "Push to GitHub"},
 	{key: "d", description: "Show diff"},
 	{key: "A", description: "Apply changes"},
+	{key: "L", description: "list all files"},
 	{key: "m", description: "Show only managed files"},
 	{key: "u", description: "Show only unmanaged files"},
 }
