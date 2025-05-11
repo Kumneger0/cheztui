@@ -2,7 +2,11 @@ package utils
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"slices"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/kumneger0/chez-tui/helpers.go"
@@ -23,9 +27,11 @@ func GetFilesFromSpecificPath(path string) ([]list.Item, error) {
 	}
 
 	var allFilesInCurrentDir []list.Item
+	output, _ := exec.Command("chezmoi", "managed", path).Output()
+	mangedFilesAndDirsInCurrentDir := strings.Split(string(output), "/n")
 
 	for _, v := range dirEntery {
-		fileEntery := helpers.FileEntry{Name: v.Name(), Path: v.Name(), IsManaged: false, IsDir: v.IsDir()}
+		fileEntery := helpers.FileEntry{Name: v.Name(), Path: v.Name(), IsManaged: isCurrentFileOrDirManaged(mangedFilesAndDirsInCurrentDir, v.Name()), IsDir: v.IsDir()}
 		allFilesInCurrentDir = append(allFilesInCurrentDir, fileEntery)
 	}
 	return allFilesInCurrentDir, nil
@@ -39,5 +45,18 @@ func FindFileProperty(path string, files []list.Item) helpers.FileEntry {
 			break
 		}
 	}
-	return fileProperty 
+	return fileProperty
+}
+
+func isCurrentFileOrDirManaged(managedFilesAndDirsInCurrentDir []string, fileNameOrDirName string) bool {
+	var isManaged bool
+	for _, v := range managedFilesAndDirsInCurrentDir {
+		dirs := strings.Split(v, "/")
+		if slices.Contains(dirs, fileNameOrDirName) {
+			isManaged = true
+			break
+		}
+
+	}
+	return isManaged
 }

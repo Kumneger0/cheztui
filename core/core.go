@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -123,18 +124,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "m":
-			managedFiles, err := chezmoi.GetChezmoiManagedFiles()
+			managedFiles, err := chezmoi.GetChezmoiManagedFiles(m.CurrentDir)
 			if err != nil {
 				return m, showToast(err.Error(), 2*time.Second)
 			}
-			m.Files.SetItems(managedFiles)
 
+			return m, m.Files.SetItems(managedFiles)
 		case "u":
-			unmanagedFiles, err := chezmoi.GetUnmanagedFiles()
+			unmanagedFiles, err := chezmoi.GetUnmanagedFiles(m.CurrentDir)
 			if err != nil {
 				return m, showToast(err.Error(), 2*time.Second)
 			}
-			m.Files.SetItems(unmanagedFiles)
+			return m, m.Files.SetItems(unmanagedFiles)
 
 		case "a":
 			if selectedFile != nil {
@@ -211,8 +212,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !fileProperty.IsDir {
 					return m, showToast("Cannot navigate to file", 2*time.Second)
 				}
-
 				fullPath := filepath.Join(m.CurrentDir, selectedFile.FilterValue())
+				homeDir, _ := os.UserHomeDir()
+
+				if fullPath == homeDir {
+					allFiles, _ := chezmoi.GetAllFiles()
+					m.Files.SetItems(allFiles)
+					m.CurrentDir = homeDir
+					return m, nil
+				}
+
 				filesNewDir, err := utils.GetFilesFromSpecificPath(fullPath)
 				if err != nil {
 					fmt.Println("There was an error while navigating to new directory", err.Error())
