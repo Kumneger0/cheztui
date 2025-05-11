@@ -26,7 +26,8 @@ func IsChezmoiInstalled() bool {
 }
 
 func getChezmoiSourceDir() (string, error) {
-	return utils.GetAbsolutePath(".local/share/chezmoi")
+	userHomeDir, _ := os.UserHomeDir()
+	return utils.GetAbsolutePath(".local/share/chezmoi", userHomeDir)
 }
 
 func IsChezmoiInitialized() bool {
@@ -47,10 +48,9 @@ func IsDir(path string) bool {
 			return false
 		}
 		return false
-	}	
+	}
 	return fileInfo.IsDir()
 }
-
 
 func GetChezmoiManagedFiles(path ...string) ([]list.Item, error) {
 	output, err := exec.Command(Command, append([]string{"managed"}, path...)...).Output()
@@ -59,7 +59,16 @@ func GetChezmoiManagedFiles(path ...string) ([]list.Item, error) {
 		return nil, err
 	}
 	files := strings.Split(string(output), "\n")
-	return getFileEntery(files, true)
+
+	if len(path) > 0 {
+		lastValue := path[len(path)-1]
+		return getFileEntery(files, true, lastValue)
+	}
+
+	userHomeDir, _ := os.UserHomeDir()
+
+	return getFileEntery(files, true, userHomeDir)
+
 }
 
 func GetUnmanagedFiles(path ...string) ([]list.Item, error) {
@@ -68,12 +77,23 @@ func GetUnmanagedFiles(path ...string) ([]list.Item, error) {
 		return nil, err
 	}
 
-	unmangedfiles := strings.Split(string(unmanaged), "\n")
-	return getFileEntery(unmangedfiles, false)
+	var unmangedfiles []string
+	files := strings.Split(string(unmanaged), "\n")
 
+	if len(path) > 0 {
+		for _, v := range files {
+			pathWitoutTheBasePath := strings.Join(strings.Split(v, "/")[1:], "/")
+			unmangedfiles = append(unmangedfiles, pathWitoutTheBasePath)
+		}
+		return getFileEntery(unmangedfiles, false, path[len(path)-1])
+	}
+	unmangedfiles = files
+	userHomeDir, _ := os.UserHomeDir()
+
+	return getFileEntery(unmangedfiles, false, userHomeDir)
 }
 
-func getFileEntery(files []string, isManaged bool) ([]list.Item, error) {
+func getFileEntery(files []string, isManaged bool, baseDir string) ([]list.Item, error) {
 	var fileEntery []list.Item
 
 	var currentTempDir tempDir
@@ -83,7 +103,7 @@ func getFileEntery(files []string, isManaged bool) ([]list.Item, error) {
 			continue
 		}
 
-		absolutePah, err := utils.GetAbsolutePath(path)
+		absolutePah, err := utils.GetAbsolutePath(path, baseDir)
 
 		if err != nil {
 			return nil, err
@@ -104,18 +124,24 @@ func getFileEntery(files []string, isManaged bool) ([]list.Item, error) {
 		}
 
 		//TODO: migrate to better-go
-		fileEntery = append(fileEntery, helpers.FileEntry{Name: path, Path: path, IsManaged:isManaged , IsDir: isCurrentPathDir})
+		fileEntery = append(fileEntery, helpers.FileEntry{Name: path, Path: path, IsManaged: isManaged, IsDir: isCurrentPathDir})
 	}
 	return fileEntery, nil
 }
 
-func GetAllFiles() ([]list.Item, error) {
-	managedFiles, err := GetChezmoiManagedFiles()
+func GetAllFiles(arg ...string) ([]list.Item, error) {
+	managedFiles, err := GetChezmoiManagedFiles(arg...)
 	//TOOD:migrate to use better-go
 	if err != nil {
 		return nil, err
 	}
-	unmanagedFiles, err := GetUnmanagedFiles()
+	var unmanagedFiles []list.Item
+
+	if len(arg) > 0 {
+		unmanagedFiles, err = GetUnmanagedFiles(arg[len(arg)-1])
+	} else {
+		unmanagedFiles, err = GetUnmanagedFiles()
+	}
 	//TOOD:migrate to use better-go
 	if err != nil {
 		return nil, err

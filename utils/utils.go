@@ -12,12 +12,8 @@ import (
 	"github.com/kumneger0/chez-tui/helpers.go"
 )
 
-func GetAbsolutePath(path string) (string, error) {
-	userHomeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userHomeDir, path), nil
+func GetAbsolutePath(path string, baseDir string) (string, error) {
+	return filepath.Join(baseDir, path), nil
 }
 
 func GetFilesFromSpecificPath(path string) ([]list.Item, error) {
@@ -59,4 +55,11 @@ func isCurrentFileOrDirManaged(managedFilesAndDirsInCurrentDir []string, fileNam
 
 	}
 	return isManaged
+}
+
+func GoTernary(condition bool, trueVal, falseVal string) string {
+	if condition {
+		return trueVal
+	}
+	return falseVal
 }

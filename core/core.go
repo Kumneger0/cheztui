@@ -42,7 +42,7 @@ func (d CustomDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		return
 	}
 
-	str := entry.Title()
+	str := lipgloss.NewStyle().Width(50).Render(entry.Title())
 
 	if entry.IsDir {
 		str = "📁 " + str
@@ -124,17 +124,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "m":
-			managedFiles, err := chezmoi.GetChezmoiManagedFiles(m.CurrentDir)
-			if err != nil {
-				return m, showToast(err.Error(), 2*time.Second)
+
+			var managedFiles []list.Item
+			userHomeDir, _ := os.UserHomeDir()
+			if userHomeDir == m.CurrentDir {
+				managedFiles, _ = chezmoi.GetAllFiles()
+			} else {
+				managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
 			}
 
 			return m, m.Files.SetItems(managedFiles)
 		case "u":
-			unmanagedFiles, err := chezmoi.GetUnmanagedFiles(m.CurrentDir)
-			if err != nil {
-				return m, showToast(err.Error(), 2*time.Second)
+
+			var unmanagedFiles []list.Item
+			userHomeDir, _ := os.UserHomeDir()
+
+			if userHomeDir == m.CurrentDir {
+				unmanagedFiles, _ = chezmoi.GetUnmanagedFiles()
+			} else {
+				unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
 			}
+
 			return m, m.Files.SetItems(unmanagedFiles)
 
 		case "a":
@@ -144,7 +154,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					return m, showToast(err.Error(), 2*time.Second)
 				} else {
-					updatedFiles, err := chezmoi.GetAllFiles()
+
+					var updatedFiles []list.Item
+					userHomeDir, _ := os.UserHomeDir()
+
+					if userHomeDir == m.CurrentDir {
+						updatedFiles, err = chezmoi.GetAllFiles()
+
+					} else {
+						updatedFiles, err = chezmoi.GetAllFiles("-i", "files", m.CurrentDir)
+					}
+
 					if err != nil {
 						return m, showToast(err.Error(), 2*time.Second)
 					}
