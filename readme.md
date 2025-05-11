@@ -13,7 +13,6 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
 - **Notifications**: Get instant feedback on what’s happening with toast messages.
 - **Switch Views**: Easily toggle between different screens for specific tasks(eg editing a file).
 
-
 ## What You’ll Need
 
 - [chezmoi](https://www.chezmoi.io/): Make sure it’s installed and set up.
@@ -42,8 +41,8 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
    ```
 
 
-
-
+ ## Note
+cheztui is just a wrapper around [chezmoi](https://www.chezmoi.io/). to see more about what each command does, make sure to check out the [chezmoi documentation](https://www.chezmoi.io/).
 
 ## Key Shortcuts with Equivalent chezmoi Commands
 
@@ -88,8 +87,6 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
 - `ctrl+c` or `q`: Quit the app (no direct chezmoi equivalent; used to exit the TUI).
 
 ## Major Dependencies
-
-Chez-TUI is built using the following major dependencies:
 
 - [chezmoi](https://www.chezmoi.io/): The core tool for managing dotfiles.
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea): A powerful, fun, and flexible Go framework for building terminal applications.
