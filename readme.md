@@ -22,7 +22,7 @@ i use chezmoi to manage my dotfiles and im so lazy to type out the commands all 
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/yourusername/cheztui.git
+   git clone https://github.com/kumneger0/cheztui.git
    cd cheztui
    ```
 
