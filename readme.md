@@ -80,7 +80,7 @@ cheztui is just a wrapper around [chezmoi](https://www.chezmoi.io/). to see more
   chezmoi managed
   ```
 - `u`: Show unmanaged files. Equivalent to:
-  ```bash
+  ```
   chezmoi unmanaged
   ```
 - `esc`: Close the file picker or go back (no direct chezmoi equivalent; used for navigation in the TUI).

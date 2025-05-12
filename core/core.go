@@ -192,6 +192,13 @@ func handleManagedFilesView(m Model) (tea.Model, tea.Cmd) {
 		managedFiles, _ = chezmoi.GetChezmoiManagedFiles()
 	} else {
 		managedFiles, _ = chezmoi.GetChezmoiManagedFiles("-i", "files", m.CurrentDir)
+		managedFiles = append([]list.Item{helpers.FileEntry{
+			Name:       "..",
+			Path:       "..",
+			IsManaged:  false,
+			IsDir:      true,
+			BackButton: true,
+		}}, managedFiles...)
 	}
 
 	return m, m.Files.SetItems(managedFiles)
@@ -205,6 +212,13 @@ func handleUnmanagedFilesView(m Model) (tea.Model, tea.Cmd) {
 		unmanagedFiles, _ = chezmoi.GetUnmanagedFiles()
 	} else {
 		unmanagedFiles, _ = chezmoi.GetUnmanagedFiles(m.CurrentDir)
+		unmanagedFiles = append([]list.Item{helpers.FileEntry{
+			Name:       "..",
+			Path:       "..",
+			IsManaged:  false,
+			IsDir:      true,
+			BackButton: true,
+		}}, unmanagedFiles...)
 	}
 
 	return m, m.Files.SetItems(unmanagedFiles)
@@ -348,14 +362,6 @@ func handleNavigateDirectory(m Model, selectedFile list.Item) (tea.Model, tea.Cm
 		fmt.Println("There was an error while navigating to new directory", err.Error())
 	}
 
-	filesNewDir = append([]list.Item{helpers.FileEntry{
-		Name:       "..",
-		Path:       "..",
-		IsManaged:  false,
-		IsDir:      true,
-		BackButton: true,
-	}}, filesNewDir...)
-
 	m.Files.SetItems(filesNewDir)
 	m.CurrentDir = fullPath
 	return m, nil
@@ -364,7 +370,7 @@ func handleNavigateDirectory(m Model, selectedFile list.Item) (tea.Model, tea.Cm
 func (m Model) View() string {
 	m.Files.Title = "Chezmoi Files"
 	m.Files.SetShowTitle(true)
-	
+
 	listView := m.Files.View()
 
 	if m.Toast != nil && time.Now().Before(m.Toast.expires) {

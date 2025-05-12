@@ -59,10 +59,15 @@ func GetChezmoiManagedFiles(path ...string) ([]list.Item, error) {
 		return nil, err
 	}
 	files := strings.Split(string(output), "\n")
+    var mangedFilesWithoutParentDirName []string
 
 	if len(path) > 0 {
 		lastValue := path[len(path)-1]
-		return getFileEntery(files, true, lastValue)
+		for _, v := range files {
+			pathWithouBasePath := strings.Join(strings.Split(v, "/")[1:], "/")
+			mangedFilesWithoutParentDirName = append(mangedFilesWithoutParentDirName , pathWithouBasePath)
+		}
+		return getFileEntery(mangedFilesWithoutParentDirName, true, lastValue)
 	}
 
 	userHomeDir, _ := os.UserHomeDir()
@@ -145,6 +150,17 @@ func GetAllFiles(arg ...string) ([]list.Item, error) {
 	//TOOD:migrate to use better-go
 	if err != nil {
 		return nil, err
+	}
+
+	if len(arg) > 0 {
+		allFiles := append([]list.Item{helpers.FileEntry{
+			Name:      "..",
+			Path:      "..",
+			IsManaged: false,
+			IsDir:     true,
+		}}, append(managedFiles, unmanagedFiles...)...)
+
+		return allFiles, nil
 	}
 	return append(managedFiles, unmanagedFiles...), nil
 }

@@ -30,6 +30,20 @@ func GetFilesFromSpecificPath(path string) ([]list.Item, error) {
 		fileEntery := helpers.FileEntry{Name: v.Name(), Path: v.Name(), IsManaged: isCurrentFileOrDirManaged(mangedFilesAndDirsInCurrentDir, v.Name()), IsDir: v.IsDir()}
 		allFilesInCurrentDir = append(allFilesInCurrentDir, fileEntery)
 	}
+
+	userHomeDir, _ := os.UserHomeDir()
+
+	if path == userHomeDir {
+		return allFilesInCurrentDir, nil
+	}
+
+	allFilesInCurrentDir = append([]list.Item{helpers.FileEntry{
+		Name:       "..",
+		Path:       "..",
+		IsManaged:  false,
+		IsDir:      true, 
+	}}, allFilesInCurrentDir...) 
+
 	return allFilesInCurrentDir, nil
 }
 
