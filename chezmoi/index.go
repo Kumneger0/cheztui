@@ -146,6 +146,17 @@ func GetAllFiles(arg ...string) ([]list.Item, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if len(arg) > 0 {
+		allFiles := append([]list.Item{helpers.FileEntry{
+			Name:      "..",
+			Path:      "..",
+			IsManaged: false,
+			IsDir:     true,
+		}}, append(managedFiles, unmanagedFiles...)...)
+
+		return allFiles, nil
+	}
 	return append(managedFiles, unmanagedFiles...), nil
 }
 
